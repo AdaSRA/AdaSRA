@@ -1,198 +1,241 @@
-# AdaSRA: Patch-Trend Mixture Framework for Time Series Forecasting
 
-AdaSRA is a PyTorch-based framework for long-term time series forecasting. The current implementation focuses on a lightweight patch-trend mixture architecture, combining reversible normalization, moving-average decomposition, patch-level residual modeling, trend modeling, and optional adaptive channel mixing.
+# AdaSRA: Cost-aware Adaptive Spatial Residual Allocation for Long-Term Multivariate Time Series Forecasting
 
-The training and evaluation pipeline follows the common long-term forecasting setting used by ETT, Solar, PEMS, and custom multivariate time series datasets.
+## 📰 News
 
+🚩 Code for AdaSRA is released.
 
-## Project Structure
+🚩 AdaSRA provides a cost-aware conditional spatial residual allocation framework for long-term multivariate time series forecasting.
 
-```text
-AdaSRA
-|-- assets/                  # Figures used by README
-|-- data_provider/           # Dataset loading and train/val/test splitting
-|-- exp/                     # Training, validation, and testing loops
-|-- layers/                  # Reusable model layers
-|-- models/
-|   `-- AdaSRA.py            # AdaSRA model implementation
-|-- scripts/
-|   `-- etth1.sh             # Example ETTh1 training script
-|-- utils/                   # Metrics, early stopping, time features, augmentation
-|-- requirements.txt
-|-- run.py                   # Main training/testing entry
-`-- README.md
-```
+## 🌟 Overview
 
-## Main Features
+AdaSRA is a cost-aware adaptive spatial residual allocation framework for long-term multivariate time series forecasting.
 
-- Long-term forecasting entry point through `run.py`.
-- Supports `long_term_forecast` and `short_term_forecast` experiment classes.
-- Built-in datasets: `ETTh1`, `ETTh2`, `ETTm1`, `ETTm2`, `custom`, `Solar`, `PEMS`, and `Climate`.
-- Forecasting modes: `M`, `S`, and `MS`.
-- AdaSRA model variants:
-  - `base`: only linear shortcut branch.
-  - `patch`: patch residual expert.
-  - `trend`: trend expert.
-  - `avg`: average fusion of patch and trend experts.
-  - `router`: dynamic routing between patch and trend experts.
-- Optional components:
-  - RevIN normalization.
-  - Moving-average series decomposition.
-  - Linear shortcut branch.
-  - Channel mixer with `legacy`, `adaptive`, `on`, or `off` mode.
+Existing multivariate forecasting methods often introduce explicit cross-variable modeling through attention, graph structures, channel mixing, or dynamic dependency learning. However, once introduced, such spatial interaction is usually executed as an always-on computation path, although its marginal benefit can vary across datasets and may not always justify the additional cost.
 
-## Environment
+AdaSRA addresses this issue by decomposing forecasting into:
 
-The project is developed with Python 3.10 and PyTorch.
+- **Temporal Base Forecaster**: generates a strong temporal base forecast.
+- **Optional Spatial Residual Mixer**: provides cross-variable residual correction after temporal base forecasting.
+- **Count Gate**: decides whether to activate the spatial residual path using a training-free and near-zero-overhead rule.
 
-Install dependencies:
+The core idea of AdaSRA is simple but effective: spatial residual refinement should be allocated only when it is beneficial, rather than always executed.
+
+![](./assets/pipline.png)
+
+## 🛠 Prerequisites
+
+The code is implemented in Python and PyTorch.
+
+We recommend using Python 3.10 and installing the required dependencies by running:
 
 ```bash
 pip install -r requirements.txt
-```
+````
 
-Main dependencies are listed in `requirements.txt`:
+A typical environment is:
 
 ```text
-numpy==1.26.4
-pandas==2.2.3
-optuna==3.6.1
-scikit_learn==1.5.2
-torch==2.3.1
-torchaudio==2.3.1
-torchvision==0.18.1
+Python >= 3.10
+PyTorch >= 2.0
+CUDA >= 11.8
+NumPy
+Pandas
+scikit-learn
+matplotlib
 ```
 
-Some optional or framework-level modules also import `matplotlib`, `tqdm`, `sktime`, and `patoolib`. If your environment reports a missing module when running `run.py`, install the missing package with `pip install <package-name>`.
+## 📊 Prepare Datasets
 
-## Data Preparation
+Please download the required datasets and place them under the `./data` directory.
 
-Create a `data` directory under the project root:
+The expected directory structure is:
+
+```text
+data
+├── ETTh1.csv
+├── ETTh2.csv
+├── ETTm1.csv
+├── ETTm2.csv
+├── weather.csv
+├── electricity.csv
+├── traffic.csv
+├── PEMS03.npz
+├── PEMS04.npz
+├── PEMS07.npz
+└── PEMS08.npz
+```
+
+The regular long-term forecasting datasets include:
+
+```text
+ETTh1, ETTh2, ETTm1, ETTm2, Weather, Electricity, Traffic
+```
+
+The traffic sensor forecasting datasets include:
+
+```text
+PEMS03, PEMS04, PEMS07, PEMS08
+```
+
+## 💻 Training
+
+All training scripts are located in `./scripts`.
+
+For example, to train AdaSRA on the ETTh1 dataset, run:
+
+```bash
+bash ./scripts/etth1.sh
+```
+
+You can also run AdaSRA directly with:
+
+```bash
+python -u run.py \
+  --task_name long_term_forecast \
+  --is_training 1 \
+  --root_path ./data/ \
+  --data_path ETTh1.csv \
+  --model_id ETTh1_96_96 \
+  --model AdaSRA \
+  --data ETTh1 \
+  --features M \
+  --seq_len 96 \
+  --label_len 0 \
+  --pred_len 96 \
+  --c_out 7 \
+  --des Exp \
+  --itr 1 \
+  --batch_size 32 \
+  --learning_rate 0.0001 \
+  --channel_mixer_mode adaptive \
+  --channel_mixer_threshold 100 \
+  --spatial_dim 128
+```
+
+## ⚙️ Count Gate
+
+AdaSRA uses a training-free Count Gate to decide whether the Optional Spatial Residual Mixer should be activated:
+
+```text
+g(C) = 1, if C > τ
+g(C) = 0, if C ≤ τ
+```
+
+where:
+
+* `C` is the number of variables.
+* `τ` is the activation threshold.
+* The default threshold is `τ = 100`.
+
+In the code, this is controlled by:
+
+```bash
+--channel_mixer_mode adaptive
+--channel_mixer_threshold 100
+```
+
+Execution modes:
+
+```text
+adaptive   Count Gate-selected execution
+on         Always activate the spatial residual mixer
+off        Always skip the spatial residual mixer
+always_on  Always activate the spatial residual mixer
+always_off Always skip the spatial residual mixer
+```
+
+## 📁 Project Structure
 
 ```text
 AdaSRA
-`-- data
-    |-- ETTh1.csv
-    |-- ETTh2.csv
-    |-- ETTm1.csv
-    |-- ETTm2.csv
-    |-- solar_AL.txt
-    |-- PEMS03.npz
-    |-- PEMS04.npz
-    |-- PEMS07.npz
-    `-- PEMS08.npz
+├── assets
+│   └── pipline.png
+├── data_provider
+│   ├── __init__.py
+│   ├── data_factory.py
+│   ├── data_loader.py
+│   ├── m4.py
+│   └── uea.py
+├── exp
+│   ├── __init__.py
+│   ├── exp_basic.py
+│   ├── exp_long_term_forecasting.py
+│   └── exp_short_term_forecasting.py
+├── layers
+│   ├── __init__.py
+│   ├── AdaSRA_layers.py
+│   ├── Embed.py
+│   └── StandardNorm.py
+├── models
+│   ├── __init__.py
+│   └── AdaSRA.py
+├── scripts
+│   └── etth1.sh
+├── utils
+│   ├── __init__.py
+│   ├── ADTest.py
+│   ├── augmentation.py
+│   ├── dtw_metric.py
+│   ├── dtw.py
+│   ├── losses.py
+│   ├── m4_summary.py
+│   ├── masking.py
+│   ├── metrics.py
+│   ├── print_args.py
+│   ├── timefeatures.py
+│   └── tools.py
+├── README.md
+├── requirements.txt
+└── run.py
 ```
 
-For ETT and custom CSV datasets, the expected format is:
+## 📌 Output Files
+
+After training and testing:
+
+* Model checkpoints are saved in:
 
 ```text
-date,feature_1,feature_2,...,target
+./checkpoints
 ```
 
-Notes:
-
-- `ETTh1` and `ETTh2` use hourly data.
-- `ETTm1` and `ETTm2` use 15-minute data.
-- `custom` datasets are split as 70% train, 10% validation, and 20% test.
-- `PEMS` datasets should be `.npz` files with a `data` array.
-- `Solar` uses comma-separated text data such as `solar_AL.txt`.
-
-
-
-
-## Evaluation
-
-After training, the script automatically evaluates the best checkpoint on the test set.
-
-To test an existing checkpoint, set `--is_training 0` and keep the same experiment arguments used during training:
-
-
-## Outputs
-
-Training and testing create the following outputs:
+* Forecasting results are saved in:
 
 ```text
-checkpoints/                         # Best model checkpoints
-results/                             # Result folders for each experiment
-result_long_term_forecast.txt        # MSE and MAE summary
-logs/                                # Logs generated by shell scripts
+./results
 ```
 
-The main evaluation metrics are:
+* Test summaries are saved in:
 
-- `MSE`
-- `MAE`
-- `RMSE`
-- `MAPE`
-- `MSPE`
+```text
+./result_long_term_forecast.txt
+```
 
-The current test loop prints `mse` and `mae`, and appends them to `result_long_term_forecast.txt`.
+## 📚 Citation
 
-## Important Arguments
+If you find this repository useful, please consider citing our paper:
 
-### Basic
+```bibtex
+@article{wu2026adasra,
+  title={AdaSRA: Cost-aware Adaptive Spatial Residual Allocation for Long-Term Multivariate Time Series Forecasting},
+  author={Wu, Yue and Zhai, Junhai},
+  journal={},
+  year={2026}
+}
+```
 
-| Argument | Description |
-| --- | --- |
-| `--task_name` | Experiment type. Common value: `long_term_forecast`. |
-| `--is_training` | `1` for training, `0` for testing. |
-| `--model` | Model name. Current registered model: `AdaSRA`. |
-| `--model_id` | Experiment identifier used in checkpoint/result paths. |
-| `--data` | Dataset type, such as `ETTh1`, `ETTm1`, `custom`, `Solar`, `PEMS`, or `Climate`. |
-| `--root_path` | Dataset directory. |
-| `--data_path` | Dataset file name. |
+The BibTeX entry will be updated after publication.
 
-### Forecasting
+## 🙏 Acknowledgement
 
-| Argument | Description |
-| --- | --- |
-| `--features` | `M`: multivariate to multivariate, `S`: univariate to univariate, `MS`: multivariate to univariate. |
-| `--target` | Target column for `S` or `MS` tasks. |
-| `--seq_len` | Input sequence length. |
-| `--label_len` | Decoder label length kept for compatibility with the forecasting framework. |
-| `--pred_len` | Prediction length. |
-| `--enc_in` | Number of input variables. |
-| `--dec_in` | Number of decoder variables. |
-| `--c_out` | Number of output variables. |
+This repository is built upon several excellent time series forecasting codebases and benchmarks.
+
+We thank the authors of the following repositories for their valuable contributions:
+
+* [Time-Series-Library](https://github.com/thuml/Time-Series-Library)
+* [PatchTST](https://github.com/yuqinie98/PatchTST)
+* [iTransformer](https://github.com/thuml/iTransformer)
+* [DUET](https://github.com/decisionintelligence/DUET)
 
 
-
-### Optimization
-
-| Argument | Description |
-| --- | --- |
-| `--train_epochs` | Maximum number of training epochs. |
-| `--batch_size` | Batch size. |
-| `--learning_rate` | Adam learning rate. |
-| `--patience` | Early stopping patience. |
-| `--lradj` | Learning-rate adjustment strategy. |
-| `--use_amp` | Enable automatic mixed precision training. |
-| `--seed` | Random seed. |
-
-## Model Overview
-
-AdaSRA receives an input tensor with shape `[batch, seq_len, channels]` and predicts `[batch, pred_len, channels]`.
-
-The current architecture contains:
-
-1. RevIN normalization.
-2. Moving-average decomposition into residual and trend components.
-3. Patch expert for residual sequence modeling.
-4. Trend MLP expert for smooth trend forecasting.
-5. Optional dynamic router that learns per-channel weights for patch and trend experts.
-6. Linear shortcut branch from the original input sequence.
-7. Optional channel mixer for cross-variable interaction.
-8. RevIN denormalization.
-
-
-
-## Notes
-
-- The currently registered model name is `AdaSRA`.
-- Keep the same arguments during testing as training, especially `model_id`, `model_variant`, `seq_len`, `pred_len`, `enc_in`, and `c_out`.
-- Shell scripts may need path or GPU changes depending on your local environment.
-- If CUDA is unavailable, the code automatically falls back to CPU when `torch.cuda.is_available()` is false.
-
-## Acknowledgement
-
-This project structure follows common time series forecasting repositories and reuses several utilities inspired by open-source forecasting libraries such as Time-Series-Library, PatchTST, iTransformer, DUET, and related baselines.
