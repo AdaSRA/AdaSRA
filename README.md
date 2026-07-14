@@ -4,7 +4,7 @@ AdaSRA is a PyTorch-based framework for long-term time series forecasting. The c
 
 The training and evaluation pipeline follows the common long-term forecasting setting used by ETT, Solar, PEMS, and custom multivariate time series datasets.
 
-![pipeline](./assets/pipline.png)
+![pipline](./assets/pipline.png)
 
 ## Project Structure
 
